@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="f832abf4-cf8d-4637-b7ad-ae388c3624c7" name="can-dta" url="http://10.102.108.85">
+        <fileTransfer rootFolder="/data/zzd/domain/paper/can-dta" accessType="SFTP" host="10.108.102.85" port="51722" sshConfigId="4942f41b-d90f-4644-8d83-1296e837eada" sshConfig="can-ssh config">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

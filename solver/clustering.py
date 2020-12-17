@@ -1,5 +1,6 @@
 import torch
 from torch.nn import functional as F
+import torch.nn as nn
 from utils.utils import to_cuda, to_onehot
 from scipy.optimize import linear_sum_assignment
 from math import ceil
@@ -61,7 +62,8 @@ class Clustering(object):
         _, col_ind = linear_sum_assignment(cost)
         return col_ind
 
-    def collect_samples(self, net, loader):
+    # def collect_samples(self, net, loader):
+    def collect_samples(self, feature_extractor, loader):
         data_feat, data_gt, data_paths = [], [], []
         for sample in iter(loader):
             data = sample['Img'].cuda()
@@ -69,8 +71,11 @@ class Clustering(object):
             if 'Label' in sample.keys():
                 data_gt += [to_cuda(sample['Label'])]
 
-            output = net.forward(data)
-            feature = output[self.feat_key].data
+            # output = net.forward(data)
+            # feature = output[self.feat_key].data
+            feature, _ = feature_extractor(data)
+            feature = nn.AdaptiveAvgPool2d((1, 1))(feature).view(-1, 2048)
+            feature = feature.data
             data_feat += [feature]
 
         self.samples['data'] = data_paths
@@ -78,11 +83,13 @@ class Clustering(object):
             if len(data_gt) > 0 else None
         self.samples['feature'] = torch.cat(data_feat, dim=0)
 
-    def feature_clustering(self, net, loader):
+    # def feature_clustering(self, net, loader):
+    def feature_clustering(self, feature_extractor, loader):
         centers = None
         self.stop = False
 
-        self.collect_samples(net, loader)
+        # self.collect_samples(net, loader)
+        self.collect_samples(feature_extractor, loader)
         feature = self.samples['feature']
 
         refs = to_cuda(torch.LongTensor(range(self.num_classes)).unsqueeze(1))

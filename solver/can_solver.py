@@ -12,8 +12,10 @@ from copy import deepcopy
 
 
 class CANSolver(BaseSolver):
-    def __init__(self, net, dataloader, bn_domain_map={}, resume=None, **kwargs):
-        super(CANSolver, self).__init__(net, dataloader, bn_domain_map=bn_domain_map, resume=resume, **kwargs)
+    # def __init__(self, net, dataloader, bn_domain_map={}, resume=None, **kwargs):
+    #     super(CANSolver, self).__init__(net, dataloader, bn_domain_map=bn_domain_map, resume=resume, **kwargs)
+    def __init__(self, models, dataloader, bn_domain_map={}, resume=None, **kwargs):
+        super(CANSolver, self).__init__(models, dataloader, bn_domain_map=bn_domain_map, resume=resume, **kwargs)
 
         if len(self.bn_domain_map) == 0:
             self.bn_domain_map = {self.source_name: 0, self.target_name: 1}
@@ -23,7 +25,14 @@ class CANSolver(BaseSolver):
 
         assert ('categorical' in self.train_data)
 
-        num_layers = len(self.net.module.FC) + 1
+        # num_layers = len(self.net.module.FC) + 1
+        # num_layers = 0
+        # for k, v in self.models['classifier'].module.named_parameters():
+        #     if k.startswith('fc'):
+        #         num_layers += 1
+        # num_layers = int(num_layers / 2) + 1
+        num_layers = 2
+        # num_layers = len(self.models['classifier'].module.fc3) + 1
         self.cdd = CDD(kernel_num=self.opt.CDD.KERNEL_NUM, kernel_mul=self.opt.CDD.KERNEL_MUL,
                        num_layers=num_layers, num_classes=self.opt.DATASET.NUM_CLASSES,
                        intra_only=self.opt.CDD.INTRA_ONLY)
@@ -105,6 +114,7 @@ class CANSolver(BaseSolver):
                     preds = to_onehot(self.clustered_target_samples['label'],
                                       self.opt.DATASET.NUM_CLASSES)
                     gts = self.clustered_target_samples['gt']
+                    # 模型评估，mean_acc, accuracy
                     res = self.model_eval(preds, gts)
                     print('Clustering %s: %.4f' % (self.opt.EVAL_METRIC, res))
 
@@ -128,26 +138,36 @@ class CANSolver(BaseSolver):
         print('Training Done!')
 
     def update_labels(self):
-        net = self.net
-        net.eval()
+        # net = self.net
+        # net.eval()
+
+        classifier = self.classifier.eval()
+        feature_extractor = self.feature_extractor.eval()
         opt = self.opt
 
         source_dataloader = self.train_data[self.clustering_source_name]['loader']
-        net.module.set_bn_domain(self.bn_domain_map[self.source_name])
+        # net.module.set_bn_domain(self.bn_domain_map[self.source_name])
+        # set_bn_domain
+        # classifier.module.set_bn_domain(self.bn_domain_map[self.source_name])
+        # feature_extractor.module.set_bn_domain(self.bn_domain_map[self.source_name])
 
         # 1.用 resnet50 提取特征，聚类生成源域的聚类中心，源域类别数是聚类中心的个数
-        source_centers = solver_utils.get_centers(net,
+        # source_centers = solver_utils.get_centers(net,
+        source_centers = solver_utils.get_centers(feature_extractor,
                                                   source_dataloader, self.opt.DATASET.NUM_CLASSES,
                                                   self.opt.CLUSTERING.FEAT_KEY)
         # 2.目标域的初始值赋值为源域的中心
         init_target_centers = source_centers
 
         target_dataloader = self.train_data[self.clustering_target_name]['loader']
-        net.module.set_bn_domain(self.bn_domain_map[self.target_name])
+        # net.module.set_bn_domain(self.bn_domain_map[self.target_name])
+        # classifier.module.set_bn_domain(self.bn_domain_map[self.target_name])
+        # feature_extractor.module.set_bn_domain(self.bn_domain_map[self.target_name])
 
-        # 3.在目标域上执行聚类算法，生成伪标签，我要加的 MMT 就是在生成伪标签的时候
+        # 3.在目标域上执行聚类算法，生成伪标签
         self.clustering.set_init_centers(init_target_centers)
-        self.clustering.feature_clustering(net, target_dataloader)
+        # self.clustering.feature_clustering(net, target_dataloader)
+        self.clustering.feature_clustering(feature_extractor, target_dataloader)
 
     def filtering(self):
         threshold = self.opt.CLUSTERING.FILTERING_THRESHOLD  # 1.0
@@ -196,6 +216,11 @@ class CANSolver(BaseSolver):
         return source_samples, source_nums, target_samples, target_nums
 
     def prepare_feats(self, feats):
+        '''
+        从 feats 中过滤出 feat, probs
+        :param feats: {'feat', 'logits', 'probs'}
+        :return: opt.CDD.ALIGNMENT_FEAT_KEYS = ['feat', 'probs']
+        '''
         return [feats[key] for key in feats if key in self.opt.CDD.ALIGNMENT_FEAT_KEYS]
 
     def compute_iters_per_loop(self, filtered_classes):
@@ -218,8 +243,13 @@ class CANSolver(BaseSolver):
             self.update_lr()
 
             # set the status of network
-            self.net.train()
-            self.net.zero_grad()
+            # self.net.train()
+            # self.net.zero_grad()
+            # dta set status of newwork
+            self.feature_extractor.train()
+            self.classifier.train()
+            self.feature_extractor.zero_grad()
+            self.classifier.zero_grad()
 
             loss = 0
             ce_loss_iter = 0
@@ -232,8 +262,14 @@ class CANSolver(BaseSolver):
 
             source_data = to_cuda(source_data)
             source_gt = to_cuda(source_gt)
-            self.net.module.set_bn_domain(self.bn_domain_map[self.source_name])
-            source_preds = self.net(source_data)['logits']
+            # self.net.module.set_bn_domain(self.bn_domain_map[self.source_name])
+            # dta bn_domain
+            # self.feature_extractor.module.set_bn_domain(self.bn_domain_map[self.source_name])
+            # self.classifier.module.set_bn_domain(self.bn_domain_map[self.source_name])
+            # source_preds = self.net(source_data)['logits']
+            # dta 预测
+            source_feat1, source_feat2 = self.feature_extractor(source_data)
+            source_preds = self.classifier(source_feat1)
 
             # compute the cross-entropy loss
             ce_loss = self.CELoss(source_preds, source_gt)
@@ -254,14 +290,32 @@ class CANSolver(BaseSolver):
                 target_cls_concat = torch.cat([to_cuda(samples)
                                                for samples in target_samples_cls], dim=0)
 
-                self.net.module.set_bn_domain(self.bn_domain_map[self.source_name])
-                feats_source = self.net(source_cls_concat)
-                self.net.module.set_bn_domain(self.bn_domain_map[self.target_name])
-                feats_target = self.net(target_cls_concat)
+                # self.net.module.set_bn_domain(self.bn_domain_map[self.source_name])
+                # dta source bn_domain
+                # self.feature_extractor.module.set_bn_domain(self.bn_domain_map[self.source_name])
+                # self.classifier.module.set_bn_domain(self.bn_domain_map[self.source_name])
+                # feats_source = self.net(source_cls_concat)
+                # dta
+                feat_source1, feat_source2 = self.feature_extractor(source_cls_concat)
+                probs_source = self.classifier(feat_source1)
+                # self.net.module.set_bn_domain(self.bn_domain_map[self.target_name])
+                # dta target bn_domain
+                # self.feature_extractor.module.set_bn_domain(self.bn_domain_map[self.target_name])
+                # self.classifier.module.set_bn_domain(self.bn_domain_map[self.target_name])
+                # feats_target = self.net(target_cls_concat)
+                # dta
+                feat_target1, feat_target2 = self.feature_extractor(target_cls_concat)
+                probs_target = self.classifier(feat_target1)
 
-                # prepare the features
-                feats_toalign_S = self.prepare_feats(feats_source)
-                feats_toalign_T = self.prepare_feats(feats_target)
+                # prepare the features 从 feats:{'feat', 'logits', 'probs'} 中过滤出 feat, probs
+                # feats_toalign_S = self.prepare_feats(feats_source)
+                # feats_toalign_T = self.prepare_feats(feats_target)
+                feat_source1 = nn.AdaptiveAvgPool2d((1, 1))(feat_source1).view(-1, 2048)
+                feat_target1 = nn.AdaptiveAvgPool2d((1, 1))(feat_target1).view(-1, 2048)
+                # feat_source1 = nn.AdaptiveAvgPool2d((1, 1))(feat_source1)
+                # feat_target1 = nn.AdaptiveAvgPool2d((1, 1))(feat_target1)
+                feats_toalign_S = [feat_source1, probs_source]
+                feats_toalign_T = [feat_target1, probs_target]
 
                 cdd_loss = self.cdd.forward(feats_toalign_S, feats_toalign_T,
                                             source_nums_cls, target_nums_cls)[self.discrepancy_key]
@@ -288,14 +342,16 @@ class CANSolver(BaseSolver):
             if self.opt.TRAIN.TEST_INTERVAL > 0 and \
                     (update_iters + 1) % int(self.opt.TRAIN.TEST_INTERVAL * self.iters_per_loop) == 0:
                 with torch.no_grad():
-                    self.net.module.set_bn_domain(self.bn_domain_map[self.target_name])
+                    # self.net.module.set_bn_domain(self.bn_domain_map[self.target_name])
                     accu = self.test()
                     print('Test at (loop %d, iters: %d) with %s: %.4f.' % (self.loop,
                                                                            self.iters, self.opt.EVAL_METRIC, accu))
 
             if self.opt.TRAIN.SAVE_CKPT_INTERVAL > 0 and \
-                    (update_iters + 1) % int(self.opt.TRAIN.SAVE_CKPT_INTERVAL * self.iters_per_loop) == 0:
+                    (update_iters + 1) % int(self.opt.TRAIN.SAVE_CKPT_INTERVAL * self.iters_per_loop) == 0:\
+                # TODO 保存模型
                 self.save_ckpt()
+                # pass
 
             update_iters += 1
             self.iters += 1

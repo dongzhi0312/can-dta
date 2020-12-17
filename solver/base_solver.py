@@ -9,12 +9,16 @@ from config.config import cfg
 
 
 class BaseSolver:
-    def __init__(self, net, dataloader, bn_domain_map={}, resume=None, **kwargs):
+    # def __init__(self, net, dataloader, bn_domain_map={}, resume=None, **kwargs):
+    def __init__(self, models, dataloader, bn_domain_map={}, resume=None, **kwargs):
         self.opt = cfg
         self.source_name = self.opt.DATASET.SOURCE_NAME
         self.target_name = self.opt.DATASET.TARGET_NAME
 
-        self.net = net
+        # self.net = net
+        self.models = models
+        self.feature_extractor = models['feature_extractor']
+        self.classifier = models['classifier']
         self.init_data(dataloader)
 
         self.CELoss = nn.CrossEntropyLoss()
@@ -60,8 +64,10 @@ class BaseSolver:
 
     def build_optimizer(self):
         opt = self.opt
-        param_groups = solver_utils.set_param_groups(self.net,
-                                                     dict({'FC': opt.TRAIN.LR_MULT}))
+        # param_groups = solver_utils.set_param_groups(self.net,
+        #                                              dict({'FC': opt.TRAIN.LR_MULT}))
+        param_groups = solver_utils.set_param_groups(self.feature_extractor, self.classifier,
+                                                     dict({'classifier': opt.TRAIN.LR_MULT}))
 
         assert opt.TRAIN.OPTIMIZER in ["Adam", "SGD"], \
             "Currently do not support your specified optimizer."
@@ -124,15 +130,18 @@ class BaseSolver:
         ckpt_weights = os.path.join(save_path, 'ckpt_%d_%d.weights' % (self.loop, self.iters))
         torch.save({'loop': self.loop,
                     'iters': self.iters,
-                    'model_state_dict': self.net.module.state_dict(),
+                    # 'model_state_dict': self.net.module.state_dict(),
+                    'feature_extractor_state_dict': self.feature_extractor.module.state_dict(),
+                    'classifier_state_dict': self.classifier.module.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                     'history': self.history,
-                    'bn_domain_map': self.bn_domain_map
+                    # 'bn_domain_map': self.bn_domain_map
                     }, ckpt_resume)
 
-        torch.save({'weights': self.net.module.state_dict(),
-                    'bn_domain_map': self.bn_domain_map
-                    }, ckpt_weights)
+        # torch.save({'weights': self.net.module.state_dict(),
+        # torch.save({'weights': self.feature_extractor.module.state_dict(),
+                    # 'bn_domain_map': self.bn_domain_map
+                    # }, ckpt_weights)
 
     def complete_training(self):
         if self.loop > self.opt.TRAIN.MAX_LOOP:
@@ -189,12 +198,17 @@ class BaseSolver:
         return sample
 
     def test(self):
-        self.net.eval()
+        # self.net.eval()
+        self.feature_extractor.eval()
+        self.classifier.eval()
         preds = []
         gts = []
         for sample in iter(self.test_data['loader']):
             data, gt = to_cuda(sample['Img']), to_cuda(sample['Label'])
-            logits = self.net(data)['logits']
+            # logits = self.net(data)['logits']
+            feature1, feature2 = self.feature_extractor(data)
+            # feature1 = nn.AdaptiveAvgPool2d((1, 1))(feature1).view(-1, 2048)
+            logits = self.classifier(feature1)
             preds += [logits]
             gts += [gt]
 

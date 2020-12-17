@@ -75,20 +75,36 @@ def adjust_learning_rate_inv(lr, optimizer, iters, alpha=0.001, beta=0.75):
         param_group['lr'] = lr * param_group['lr_mult']
 
 
-def set_param_groups(net, lr_mult_dict):
+# def set_param_groups(net, lr_mult_dict):
+#     params = []
+#     modules = net.module._modules
+#     for name in modules:
+#         module = modules[name]
+#         if name in lr_mult_dict:
+#             params += [{'params': module.parameters(), 'lr_mult': lr_mult_dict[name]}]
+#         else:
+#             params += [{'params': module.parameters(), 'lr_mult': 1.0}]
+#
+#     return params
+
+# dta set_param_groups
+def set_param_groups(feature_extractor, classifier, lr_mult_dict):
     params = []
-    modules = net.module._modules
-    for name in modules:
-        module = modules[name]
-        if name in lr_mult_dict:
-            params += [{'params': module.parameters(), 'lr_mult': lr_mult_dict[name]}]
-        else:
-            params += [{'params': module.parameters(), 'lr_mult': 1.0}]
+    params += [{'params': classifier.parameters(), 'lr_mult': lr_mult_dict['classifier']}]
+    params += [{'params': feature_extractor.parameters(), 'lr_mult': 1.0}]
+    # modules = net.module._modules
+    # for name in modules:
+    #     module = modules[name]
+    #     if name in lr_mult_dict:
+    #         params += [{'params': module.parameters(), 'lr_mult': lr_mult_dict[name]}]
+    #     else:
+    #         params += [{'params': module.parameters(), 'lr_mult': 1.0}]
 
     return params
 
 
-def get_centers(net, dataloader, num_classes, key='feat'):
+# def get_centers(net, dataloader, num_classes, key='feat'):
+def get_centers(feature_extractor, dataloader, num_classes, key='feat'):
     centers = 0
     refs = to_cuda(torch.LongTensor(range(num_classes)).unsqueeze(1))
     for sample in iter(dataloader):
@@ -96,8 +112,12 @@ def get_centers(net, dataloader, num_classes, key='feat'):
         gt = to_cuda(sample['Label'])
         batch_size = data.size(0)
 
-        output = net.forward(data)[key]
-        feature = output.data
+        # output = net.forward(data)[key]
+        # feature = output.data
+        feature, _ = feature_extractor(data)
+        # feature = nn.AvgPool2d(7, stride=1)
+        feature = nn.AdaptiveAvgPool2d((1, 1))(feature).view(-1, 2048)
+        feature = feature.data
         feat_len = feature.size(1)
 
         gt = gt.unsqueeze(0).expand(num_classes, -1)

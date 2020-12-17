@@ -1,21 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData">
+  <component name="PublishConfigData" autoUpload="Always" serverName="can-ssh config">
     <serverData>
-      <paths name="10.108.103.217">
+      <paths name="can-dta">
         <serverdata>
           <mappings>
-            <mapping deploy="/Contrastive-Adaptation-Network-for-Unsupervised-Domain-Adaptation-master" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
-      <paths name="can-new">
+      <paths name="can-ssh config">
         <serverdata>
           <mappings>
-            <mapping deploy="/data/zzd/domain/Contrastive-Adaptation-Network-for-Unsupervised-Domain-Adaptation-master" local="$PROJECT_DIR$" />
+            <mapping deploy="/data/zzd/domain/paper/can-dta" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
     </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
   </component>
 </project>
